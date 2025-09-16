@@ -205,7 +205,7 @@ export function FileUpload({ onFileUpload, onOpenSettings }) {
         )}
 
         <p className="text-sm text-muted-foreground mt-4">
-          PDF files only. Filename must start with 4+ letters (e.g.,
+          PDF files only. Filename must start with form-code (e.g.,
           ABCD_form.pdf)
         </p>
       </div>

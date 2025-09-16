@@ -7,6 +7,7 @@ import { SuccessPage } from "./components/success-page";
 import { SettingsModal } from "./components/settings-modal";
 import { Settings, Sun, Moon } from "lucide-react";
 import "./globals.css";
+import logo from "./assets/logo.svg";
 
 export default function App() {
   const [currentStage, setCurrentStage] = useState("upload");
@@ -72,11 +73,11 @@ export default function App() {
       <header className="border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">
-                FC
-              </span>
-            </div>
+            <img
+              src={logo}
+              alt="FileConverter Logo"
+              className="w-8 h-8 text-primary"
+            />
             <span className="font-semibold text-foreground">FileConverter</span>
           </div>
 
