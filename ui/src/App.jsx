@@ -11,8 +11,10 @@ import "./globals.css";
 export default function App() {
   const [currentStage, setCurrentStage] = useState("upload");
   const [uploadedFile, setUploadedFile] = useState(null);
+  const [conversionResults, setConversionResults] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSettingsSpinning, setIsSettingsSpinning] = useState(false);
+  const [configRefreshKey, setConfigRefreshKey] = useState(0);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem("darkMode");
     return saved ? JSON.parse(saved) : false;
@@ -28,13 +30,19 @@ export default function App() {
     setCurrentStage("converting");
   };
 
-  const handleConversionComplete = () => {
+  const handleConversionComplete = (results) => {
+    setConversionResults(results);
     setCurrentStage("success");
+  };
+
+  const handleConversionError = () => {
+    setCurrentStage("upload");
   };
 
   const handleReset = () => {
     setCurrentStage("upload");
     setUploadedFile(null);
+    setConversionResults(null);
   };
 
   const handleSettingsClick = () => {
@@ -43,6 +51,16 @@ export default function App() {
       setIsSettingsOpen(true);
       setIsSettingsSpinning(false);
     }, 300);
+  };
+
+  const handleOpenSettings = () => {
+    setIsSettingsOpen(true);
+  };
+
+  const handleCloseSettings = () => {
+    setIsSettingsOpen(false);
+    // Refresh configuration check after settings are closed
+    setConfigRefreshKey(prev => prev + 1);
   };
 
   const toggleTheme = () => {
@@ -99,19 +117,26 @@ export default function App() {
 
         <div className="max-w-2xl mx-auto">
           {currentStage === "upload" && (
-            <FileUpload onFileUpload={handleFileUpload} />
+            <FileUpload
+              key={configRefreshKey}
+              onFileUpload={handleFileUpload}
+              onOpenSettings={handleOpenSettings}
+            />
           )}
 
           {currentStage === "converting" && (
             <ConversionStages
               fileName={uploadedFile?.name || ""}
+              file={uploadedFile}
               onComplete={handleConversionComplete}
+              onError={handleConversionError}
             />
           )}
 
           {currentStage === "success" && (
             <SuccessPage
               fileName={uploadedFile?.name || ""}
+              results={conversionResults}
               onReset={handleReset}
             />
           )}
@@ -120,7 +145,7 @@ export default function App() {
 
       <SettingsModal
         isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={handleCloseSettings}
       />
     </div>
   );

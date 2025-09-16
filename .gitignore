@@ -394,3 +394,6 @@ Temporary Items
 
 # Built Visual Studio Code Extensions
 *.vsix
+.claude
+backend/uploads
+backend/outputs

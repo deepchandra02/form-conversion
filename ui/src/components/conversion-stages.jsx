@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { apiClient } from "@/lib/api";
 import {
   Upload,
   FileImage,
@@ -11,85 +12,116 @@ import {
   Brain,
   Package,
   CheckCircle,
+  AlertTriangle,
 } from "lucide-react";
 
-const stages = [
-  {
-    id: "initialize",
-    label: "Initialize Form Structure",
-    icon: Upload,
-    duration: 1500,
-  },
-  {
-    id: "pdf-to-images",
-    label: "PDF to Images Conversion",
-    icon: FileImage,
-    duration: 2500,
-  },
-  {
-    id: "segmentation",
-    label: "Image Segmentation",
-    icon: Scissors,
-    duration: 2000,
-  },
-  {
-    id: "extract-code",
-    label: "Extract Form Code",
-    icon: Code,
-    duration: 1800,
-  },
-  {
-    id: "process-sections",
-    label: "AI Processing Sections",
-    icon: Brain,
-    duration: 3500,
-  },
-  {
-    id: "generate-package",
-    label: "Generate AF Package",
-    icon: Package,
-    duration: 2200,
-  },
-];
-
-export function ConversionStages({ fileName, onComplete }) {
-  const [currentStageIndex, setCurrentStageIndex] = useState(0);
-  const [progress, setProgress] = useState(0);
+export function ConversionStages({ fileName, file, onComplete, onError }) {
+  const [sessionId, setSessionId] = useState(null);
+  const [progressData, setProgressData] = useState(null);
+  const [error, setError] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
 
   useEffect(() => {
-    if (currentStageIndex >= stages.length) return;
+    let pollInterval;
 
-    const currentStage = stages[currentStageIndex];
-    const startTime = Date.now();
+    const startConversion = async () => {
+      if (hasStarted) {
+        return;
+      }
 
-    const updateProgress = () => {
-      const elapsed = Date.now() - startTime;
-      const stageProgress = Math.min(
-        (elapsed / currentStage.duration) * 100,
-        100
-      );
-      setProgress(stageProgress);
+      try {
+        setHasStarted(true);
+        setIsProcessing(true);
 
-      if (stageProgress >= 100) {
-        if (currentStageIndex < stages.length - 1) {
-          setTimeout(() => {
-            setCurrentStageIndex((prev) => prev + 1);
-            setProgress(0);
-          }, 300); // Reduced delay for smoother transitions
-        } else {
-          setTimeout(() => {
-            onComplete();
-          }, 800);
-        }
-      } else {
-        requestAnimationFrame(updateProgress);
+        // Upload file
+        const uploadResult = await apiClient.uploadFiles(file, 'single');
+        setSessionId(uploadResult.session_id);
+
+        // Start processing
+        await apiClient.startProcessing(uploadResult.session_id);
+
+        // Poll for progress
+        pollInterval = setInterval(async () => {
+          try {
+            const progress = await apiClient.getProgress(uploadResult.session_id);
+            setProgressData(progress);
+
+            if (progress.status === 'completed') {
+              clearInterval(pollInterval);
+              setIsProcessing(false);
+              onComplete(progress);
+            } else if (progress.status === 'error') {
+              clearInterval(pollInterval);
+              setIsProcessing(false);
+              setError(progress.error_message || 'An error occurred during processing');
+              onError(progress.error_message || 'An error occurred during processing');
+            }
+          } catch (err) {
+            console.error('Error polling progress:', err);
+            // Continue polling on error unless it's a critical error
+          }
+        }, 1000); // Poll every second
+
+      } catch (err) {
+        setError(err.message);
+        setIsProcessing(false);
+        setHasStarted(false);
+        onError(err.message);
       }
     };
 
-    updateProgress();
-  }, [currentStageIndex, onComplete]);
+    if (file && !hasStarted) {
+      startConversion();
+    }
 
-  const overallProgress = (currentStageIndex * 100 + progress) / stages.length;
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [file, fileName, hasStarted, onComplete, onError]);
+
+  if (error) {
+    return (
+      <Card className="p-8 backdrop-blur-sm bg-card/95 border-border/50">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-destructive/10 flex items-center justify-center">
+            <AlertTriangle className="w-8 h-8 text-destructive" />
+          </div>
+          <h2 className="text-xl font-semibold mb-2 text-foreground">
+            Processing Failed
+          </h2>
+          <p className="text-muted-foreground mb-4">{fileName}</p>
+          <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+            <p className="text-sm text-destructive">{error}</p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  if (!progressData && isProcessing) {
+    return (
+      <Card className="p-8 backdrop-blur-sm bg-card/95 border-border/50">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+            <Upload className="w-8 h-8 text-primary animate-pulse" />
+          </div>
+          <h2 className="text-xl font-semibold mb-2 text-foreground">
+            Initializing...
+          </h2>
+          <p className="text-muted-foreground">Uploading {fileName}</p>
+        </div>
+      </Card>
+    );
+  }
+
+  if (!progressData) return null;
+
+  const currentStepIndex = progressData.current_step || 0;
+  const overallProgress = progressData.progress || 0;
+  const steps = progressData.steps || [];
 
   return (
     <Card className="p-8 backdrop-blur-sm bg-card/95 border-border/50">
@@ -98,6 +130,11 @@ export function ConversionStages({ fileName, onComplete }) {
           Converting your file
         </h2>
         <p className="text-muted-foreground">{fileName}</p>
+        {progressData.elapsed_time && (
+          <p className="text-sm text-muted-foreground mt-1">
+            Elapsed time: {Math.floor(progressData.elapsed_time / 60)}:{(progressData.elapsed_time % 60).toString().padStart(2, '0')}
+          </p>
+        )}
       </div>
 
       <div className="space-y-6">
@@ -118,18 +155,18 @@ export function ConversionStages({ fileName, onComplete }) {
           </div>
         </div>
 
-        {/* Stage Indicators */}
+        {/* Step Indicators */}
         <div className="space-y-3">
-          {stages.map((stage, index) => {
-            const Icon = stage.icon;
-            const isActive = index === currentStageIndex;
-            const isCompleted = index < currentStageIndex;
-            const isCurrent = index === currentStageIndex;
-            const isUpcoming = index > currentStageIndex;
+          {steps.map((stepLabel, index) => {
+            const icons = [Upload, FileImage, Scissors, Code, Brain, Package, CheckCircle];
+            const Icon = icons[index] || Upload;
+            const isActive = index === currentStepIndex;
+            const isCompleted = index < currentStepIndex;
+            const isUpcoming = index > currentStepIndex;
 
             return (
               <div
-                key={stage.id}
+                key={index}
                 className={`
                   flex items-center space-x-4 p-4 rounded-xl transition-all duration-700 ease-out transform
                   ${
@@ -184,32 +221,21 @@ export function ConversionStages({ fileName, onComplete }) {
                       }
                     `}
                     >
-                      {stage.label}
+                      {stepLabel}
                     </span>
-
-                    {isCurrent && (
-                      <span className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold animate-pulse ml-2">
-                        {Math.round(progress)}%
-                      </span>
-                    )}
 
                     {isCompleted && (
                       <span className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold ml-2">
                         Complete
                       </span>
                     )}
-                  </div>
 
-                  {isCurrent && (
-                    <div className="mt-3">
-                      <div className="relative h-2 bg-muted/50 rounded-full overflow-hidden">
-                        <div
-                          className="absolute top-0 left-0 h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full transition-all duration-300 ease-out"
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
+                    {isActive && (
+                      <span className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold animate-pulse ml-2">
+                        Processing...
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );

@@ -2,22 +2,34 @@
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { apiClient } from "@/lib/api";
 import {
   CheckCircle,
   Download,
   RotateCcw,
   FileText,
-  Clock,
-  Zap,
+  TrendingUp,
+  Database,
 } from "lucide-react";
 
-export function SuccessPage({ fileName, onReset }) {
-  const handleDownload = () => {
-    // Simulate download - in a real app, this would trigger the actual download
-    const link = document.createElement("a");
-    link.href = "#";
-    link.download = `converted-${fileName}`;
-    link.click();
+export function SuccessPage({ fileName, results, onReset }) {
+  const handleDownload = async () => {
+    try {
+      if (results?.results?.[0]?.package_name) {
+        const blob = await apiClient.downloadFile(`generated_AF/${results.results[0].package_name}.zip`);
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${results.results[0].package_name}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Download failed:', error);
+      alert('Download failed. Please try again.');
+    }
   };
 
   return (
@@ -46,23 +58,41 @@ export function SuccessPage({ fileName, onReset }) {
             {fileName}
           </p>
 
-          <div className="grid grid-cols-3 gap-4 mb-8 p-4 bg-muted/30 rounded-lg">
-            <div className="text-center">
-              <FileText className="w-6 h-6 mx-auto mb-2 text-blue-600" />
-              <div className="text-sm font-medium">PDF Processed</div>
-              <div className="text-xs text-muted-foreground">Multi-page</div>
+          {results?.results?.[0] && (
+            <div className="grid grid-cols-3 gap-4 mb-8 p-4 bg-muted/30 rounded-lg">
+              <div className="text-center">
+                <FileText className="w-6 h-6 mx-auto mb-2 text-blue-600" />
+                <div className="text-sm font-medium">{results.results[0].page_count} Pages</div>
+                <div className="text-xs text-muted-foreground">Processed</div>
+              </div>
+              <div className="text-center">
+                <Database className="w-6 h-6 mx-auto mb-2 text-yellow-600" />
+                <div className="text-sm font-medium">{results.results[0].num_sections} Sections</div>
+                <div className="text-xs text-muted-foreground">Analyzed</div>
+              </div>
+              <div className="text-center">
+                <TrendingUp className="w-6 h-6 mx-auto mb-2 text-green-600" />
+                <div className="text-sm font-medium">{results.results[0].total_tokens?.toLocaleString()} Tokens</div>
+                <div className="text-xs text-muted-foreground">Used</div>
+              </div>
             </div>
-            <div className="text-center">
-              <Zap className="w-6 h-6 mx-auto mb-2 text-yellow-600" />
-              <div className="text-sm font-medium">AI Enhanced</div>
-              <div className="text-xs text-muted-foreground">GPT Analysis</div>
+          )}
+
+          {results?.global_stats && (
+            <div className="mb-6 p-4 bg-muted/20 rounded-lg">
+              <h4 className="text-sm font-medium mb-2 text-center">Session Statistics</h4>
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div className="text-center">
+                  <div className="font-medium">{results.global_stats.total_cost_all_forms?.toFixed(4)} USD</div>
+                  <div className="text-muted-foreground">Total Cost</div>
+                </div>
+                <div className="text-center">
+                  <div className="font-medium">{results.global_stats.total_pages_all_forms} Pages</div>
+                  <div className="text-muted-foreground">Total Processed</div>
+                </div>
+              </div>
             </div>
-            <div className="text-center">
-              <Clock className="w-6 h-6 mx-auto mb-2 text-green-600" />
-              <div className="text-sm font-medium">Ready</div>
-              <div className="text-xs text-muted-foreground">Download now</div>
-            </div>
-          </div>
+          )}
 
           <div className="space-y-4">
             <Button
